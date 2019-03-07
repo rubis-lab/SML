@@ -6,7 +6,9 @@
 #include <unistd.h>
 #include <cstring>
 #include <string>
-#include "serial.c"
+#include <unistd.h>
+#include <termios.h>
+#include <fcntl.h>
 
 std::string settingsfile = "Settings.txt";
 bool UserCanNotEditSettings = false;
@@ -16,11 +18,13 @@ bool WriteNMEAToFile = false;
 
 bool SerialShouldBeConnected = false;
 //SML HARD-CODED VALUES START
-int SerialPort = 5;
+char SerialPort[] = "/dev/ttyUSB0";
 //SML HARD-CODED VALUES END
 int SerialSpeed = 9600;
 int SerialDataBits = 8;
 int SerialStopBits = 1;
+int SerialParity = 0;
+int SerialProtocol = 0;
 std::string ReceiveBuffer;
 //Dim WithEvents COMPort As New System.IO.Ports.SerialPort
 
@@ -59,60 +63,14 @@ std::string AudioFile = "";
 //Dim lastLocation As Point = Location
 //Dim lastSize As Size = Size
 
-//Structure for arguments
-struct Args
-{
-  const char *server;
-  const char *port;
-  const char *user;
-  const char *proxyhost;
-  const char *proxyport;
-  const char *password;
-  const char *nmea;
-  const char *data;
-  int         bitrate;
-  int         mode;
-
-  int         udpport;
-  int         initudp;
-  enum SerialBaud baud;
-  enum SerialDatabits databits;
-  enum SerialStopbits stopbits;
-  enum SerialParity parity;
-  enum SerialProtocol protocol;
-  const char *serdevice;
-  const char *serlogfile;
-};
-
-
-
 std::string ToBase64(unsigned char const* bytes_to_encode, unsigned int in_len);
 
 int main(int argc, char *argv[]) {
-	struct serial sx;
-	struct Args args;
-	static char bufSerial[1000];
+	struct termios Termios;
 	struct sockaddr_in serv_addr;
 	struct hostent *server;
 	int lcount = 97;
-
-	//Connect to Serial Device
-	args.serdevice = "/dev/ttyACM0";
-	args.baud = SPABAUD_9600;
-	args.stopbits = SPASTOPBITS_1;
-	args.protocol = SPAPROTOCOL_NONE;
-	args.parity = SPAPARITY_NONE;
-	args.databits = SPADATABITS_8;
-
-	//Initialize Serial Device Connection
-	const char *e = SerialInit(&sx, args.serdevice, args.baud,
-	    		args.stopbits, args.protocol, args.parity, args.databits, 1);
-		if(e)
-		{
-			fprintf(stderr, "%s\n", e);
-			return 20;
-		}
-
+	int Stream=0;
 
 	//Connect to server
 	int sockfd = socket(AF_INET, SOCK_STREAM, 0);
@@ -182,9 +140,29 @@ int main(int argc, char *argv[]) {
 		}
 	}
 
-	//printf("%s\n", responseData.c_str());
+	printf("%s\n", responseData.c_str());
+
+	//Initialize Serial Device Connection
+	if ((Stream = open(SerialPort, O_RDWR | O_NOCTTY | O_NONBLOCK)) <= 0) {
+		perror("ERROR opening serial port");
+		exit(0);
+	}
+
+	tcgetattr(Stream, &Termios);
+
+	memset(&Termios, 0, sizeof(struct termios));
+	Termios.c_cflag = SerialSpeed | SerialStopBits | SerialParity
+			| SerialDataBits | CLOCAL | CREAD;
+
+	Termios.c_cflag |= SerialProtocol;
+	Termios.c_cc[VMIN] = 1;
+	tcflush(Stream, TCIOFLUSH);
+	tcsetattr(Stream, TCSANOW, &Termios);
+	tcflush(Stream, TCIOFLUSH);
+	fcntl(Stream, F_SETFL, O_NONBLOCK);
 
 	//ICY 200 OK, Waiting for data
+	std::string serialData;
 	DataNotReceivedFor = 0;
 	bool KeepRunning = true;
 	while (KeepRunning) {
@@ -192,11 +170,19 @@ int main(int argc, char *argv[]) {
 		int DataLength = read(sockfd, InBytes, strlen(InBytes));
 		if (DataLength > 0) {
 			DataNotReceivedFor = 0;
+			/*
+			serialData.append(InBytes);
+			char *MyBytes = new char[serialData.length() + 1];
+			std::strcpy(MyBytes, serialData.c_str());
+			printf("%s\n", serialData.c_str());
+			*/
+			//SerialWrite(MyBytes);
 			////////////////////////////         SerialWrite(InBytes) Start     ///////////////////////////////
 			std::string serialData = InBytes;
 			char * MyBytes = new char[serialData.length() + 1];
 			std::strcpy(MyBytes, serialData.c_str());
-			int j = SerialWrite(&sx, MyBytes, strlen(MyBytes));
+			printf("%s\n", MyBytes);
+			int j = write(Stream, MyBytes, strlen(MyBytes));
 			if (j < 0) {
 				fprintf(stderr, "Could not access serial device\n");
 			}
