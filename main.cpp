@@ -47,7 +47,7 @@ int NTRIPConnectionAttempt = 1;
 bool NTRIPStreamRequiresGGA = false;
 int NTRIPByteCount = 0;
 //Public NTRIPStreamArray(1, -1) As String
-std::string MostRecentGGA = "";
+std::string MostRecentGGA = "$GPGGA,052158,4158.7333,N,09147.4277,W,2,08,3.1,260.4,M,-32.6,M,,*79";
 
 int CheckForUpdateDays = 7;
 //Dim LastCheckedForUpdates As Date = "1/1/2010"
@@ -60,21 +60,16 @@ std::string AudioFile = "";
 
 std::string ToBase64(unsigned char const* bytes_to_encode, unsigned int in_len);
 
-void error(const char *msg) {
-	perror(msg);
-	exit(0);
-}
-
 int main(int argc, char *argv[]) {
-	bool NeedsToSendGGA = NTRIPStreamRequiresGGA; //This is a thread-local option that can get set to false later if only need to send GGA once.
-
 	struct sockaddr_in serv_addr;
 	struct hostent *server;
 	int lcount = 97;
 
+	//Connect to server
 	int sockfd = socket(AF_INET, SOCK_STREAM, 0);
 	if (sockfd < 0) {
-		error("ERROR opening socket");
+		perror("ERROR opening socket");
+		exit(0);
 	}
 	server = gethostbyname(NTRIPCaster.c_str());
 	if (server == NULL) {
@@ -83,12 +78,11 @@ int main(int argc, char *argv[]) {
 	}
 	bzero((char *) &serv_addr, sizeof(serv_addr));
 	serv_addr.sin_family = AF_INET;
-	bcopy((char *) server->h_addr, (char *) &serv_addr.sin_addr.s_addr,
-			server->h_length);
+	bcopy((char *) server->h_addr, (char *) &serv_addr.sin_addr.s_addr, server->h_length);
 	serv_addr.sin_port = htons(NTRIPPort);
-	if (connect(sockfd, (struct sockaddr *) &serv_addr, sizeof(serv_addr))
-			< 0) {
-		error("ERROR connecting to NTRIPCaster");
+	if (connect(sockfd, (struct sockaddr *) &serv_addr, sizeof(serv_addr)) < 0) {
+		perror("ERROR connecting to NTRIPCaster");
+		exit(0);
 	}
 
 	//Build request message
@@ -99,10 +93,8 @@ int main(int argc, char *argv[]) {
 	if (NTRIPUsername.length() > 0) {
 		// auth = "gnss:gnss", auth_encoded = "Z25zczpnbnNz"
 		std::string auth = NTRIPUsername + ":" + NTRIPPassword;
-		std::string auth_encoded = ToBase64(
-				reinterpret_cast<const unsigned char*>(auth.c_str()),
-				auth.length());
-		msg += "Authorization: Basic " + auth + "\r\n"; //This line can be removed if no authorization is needed
+		std::string auth_encoded = ToBase64(reinterpret_cast<const unsigned char*>(auth.c_str()), auth.length());
+		msg += "Authorization: Basic " + auth_encoded + "\r\n"; //This line can be removed if no authorization is needed
 	}
 	msg += "\r\n";
 
@@ -110,68 +102,81 @@ int main(int argc, char *argv[]) {
 	char *data = new char[msg.length() + 1];
 	std::strcpy(data, msg.c_str());
 	if (write(sockfd, data, strlen(data)) < 0) {
-		error("ERROR writing to socket");
+		perror("ERROR writing to socket");
+		exit(0);
 	}
 
-	loop:
-
 	//Wait for response
+	int DataNotReceivedFor = 0;
 	std::string responseData;
-	for (int i = 0; i <= 300; i++) { //Wait 30 seconds for a response
+	while (!strstr(responseData.c_str(), "ICY 200 OK")) {
 		char InBytes[1000];
 		int DataLength = read(sockfd, InBytes, strlen(InBytes));
 		if (DataLength > 0) {
-			responseData = InBytes;
-		} else if (DataLength == 0) {
-			continue;
+			responseData.append(InBytes);
+			if (strstr(responseData.c_str(), "401 Unauthorized")){
+				perror("Invalid user name or password");
+				close(sockfd);
+				exit(0);
+			}
+		} else if (DataLength == 0){
+			DataNotReceivedFor += 1;
+			if (DataNotReceivedFor > 300) {
+				//Data not received for 30 seconds. Terminate the connection.
+				perror("Wait for response - Connection timed out");
+				close(sockfd);
+				exit(0);
+			}
 		} else {
-			error("ERROR reading from socket");
-		}
-		if (responseData.length() > 0) {
-			break;
+			perror("ERROR reading from socket");
+			exit(0);
 		}
 	}
 
-	if (strstr(responseData.c_str(), "ICY 200 OK")) {
-		//ICY 200 OK, Waiting for data
-		int DataNotReceivedFor = 0;
-		bool KeepRunning = true;
-		while (KeepRunning) {
-			char InBytes[1000];
-			int DataLength = read(sockfd, InBytes, strlen(InBytes));
-			if (DataLength == 0) {
-				DataNotReceivedFor += 1;
-				if (DataNotReceivedFor > 300) {
-					//Data not received for 30 seconds. Terminate the connection.
-					KeepRunning = false;
-				}
-			} else {
-				DataNotReceivedFor = 0;
-			}
+	//printf("%s\n", responseData.c_str());
 
-			lcount += 1;
-			if (lcount == 100) {
-				std::string TheGGA = MostRecentGGA; //From GPS::ProcessNMEAdata()
-				TheGGA += "\r\n";
-				char *nmeadata = new char[TheGGA.length() + 1];
-				std::strcpy(nmeadata, TheGGA.c_str());
-				if (write(sockfd, nmeadata, strlen(nmeadata)) < 0) {
-					error("ERROR writing to socket");
-				}
-				lcount = 0;
+	//ICY 200 OK, Waiting for data
+	DataNotReceivedFor = 0;
+	bool KeepRunning = true;
+	while (KeepRunning) {
+		char InBytes[1000];
+		int DataLength = read(sockfd, InBytes, strlen(InBytes));
+		if (DataLength > 0) {
+			DataNotReceivedFor = 0;
+			//SerialWrite(MyBytes);
+		} else if (DataLength == 0) {
+			DataNotReceivedFor += 1;
+			if (DataNotReceivedFor > 300) {
+				//Data not received for 30 seconds. Terminate the connection.
+				KeepRunning = false;
+				perror("Waiting for data - Connection timed out");
+				close(sockfd);
+				exit(0);
 			}
+		} else {
+			perror("ERROR reading from socket");
+			exit(0);
 		}
-	} else {
-		goto loop;
+
+		lcount += 1;
+		if (lcount == 100) {
+			std::string TheGGA = MostRecentGGA; //From GPS::ProcessNMEAdata()
+			TheGGA += "\r\n";
+			char *nmeadata = new char[TheGGA.length() + 1];
+			std::strcpy(nmeadata, TheGGA.c_str());
+			if (write(sockfd, nmeadata, strlen(nmeadata)) < 0) {
+				perror("ERROR writing to socket");
+				exit(0);
+			}
+			lcount = 0;
+		}
 	}
 
 	close(sockfd);
 	return 0;
 }
 
-/**********************************************************************************************/
-std::string ToBase64(unsigned char const* bytes_to_encode,
-		unsigned int in_len) {
+std::string ToBase64(unsigned char const* bytes_to_encode, unsigned int in_len) {
 	std::string base64_chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 			"abcdefghijklmnopqrstuvwxyz"
 			"0123456789+/";
