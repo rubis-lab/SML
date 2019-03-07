@@ -10,13 +10,6 @@
 #include <termios.h>
 #include <fcntl.h>
 
-std::string settingsfile = "Settings.txt";
-bool UserCanNotEditSettings = false;
-bool UserCanNotDisconnectStuff = false;
-bool WriteEventsToFile = false;
-bool WriteNMEAToFile = false;
-
-bool SerialShouldBeConnected = false;
 //SML HARD-CODED VALUES START
 char SerialPort[] = "/dev/ttyUSB0";
 //SML HARD-CODED VALUES END
@@ -26,18 +19,7 @@ int SerialStopBits = 1;
 int SerialParity = 0;
 int SerialProtocol = 0;
 std::string ReceiveBuffer;
-//Dim WithEvents COMPort As New System.IO.Ports.SerialPort
 
-int ReceiverType = 0; //0 is generic, 1 is NovAtel
-int ReceiverMessageRate = 10; //Hz
-std::string ReceiverCorrDataType = "RTCMV3";
-
-bool NTRIPShouldBeConnected = false;
-int NTRIPProtocol;
-bool NTRIPUseManualGGA;
-//Public Shared NTRIPResendGGAEvery10Seconds As Boolean = True
-//static Decimal NTRIPManualLat;
-//static Decimal NTRIPManualLon;
 //SML HARD-CODED VALUES START
 std::string NTRIPCaster = "gnssdata.or.kr";
 int NTRIPPort = 2101;
@@ -45,24 +27,11 @@ std::string NTRIPUsername = "gnss";
 std::string NTRIPPassword = "gnss";
 std::string NTRIPMountPoint = "SOUL-RTCM32";
 //SML HARD-CODED VALUES END
-std::string PreferredMountPoint = "";
-//Public NTRIPThread As Threading.Thread
-bool NTRIPIsConnected = false;
-int NTRIPConnectionAttempt = 1;
-bool NTRIPStreamRequiresGGA = false;
-int NTRIPByteCount = 0;
-//Public NTRIPStreamArray(1, -1) As String
 std::string MostRecentGGA = "$GPGGA,052158,4158.7333,N,09147.4277,W,2,08,3.1,260.4,M,-32.6,M,,*79";
 
-int CheckForUpdateDays = 7;
-//Dim LastCheckedForUpdates As Date = "1/1/2010"
-
-int StartNTRIPThreadIn = 0;
-std::string AudioFile = "";
-
-//Dim lastLocation As Point = Location
-//Dim lastSize As Size = Size
-
+void SerialInput();
+void ProcessNMEAdata(std::string &x);
+std::string CalculateChecksum(std::string &sentence);
 std::string ToBase64(unsigned char const* bytes_to_encode, unsigned int in_len);
 
 int main(int argc, char *argv[]) {
@@ -219,47 +188,64 @@ int main(int argc, char *argv[]) {
 	return 0;
 }
 
-std::string ToBase64(unsigned char const* bytes_to_encode, unsigned int in_len) {
-	std::string base64_chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-			"abcdefghijklmnopqrstuvwxyz"
-			"0123456789+/";
-	std::string ret;
-	int i = 0;
-	int j = 0;
-	unsigned char char_array_3[3];
-	unsigned char char_array_4[4];
-
-	while (in_len--) {
-		char_array_3[i++] = *(bytes_to_encode++);
-		if (i == 3) {
-			char_array_4[0] = (char_array_3[0] & 0xfc) >> 2;
-			char_array_4[1] = ((char_array_3[0] & 0x03) << 4)
-					+ ((char_array_3[1] & 0xf0) >> 4);
-			char_array_4[2] = ((char_array_3[1] & 0x0f) << 2)
-					+ ((char_array_3[2] & 0xc0) >> 6);
-			char_array_4[3] = char_array_3[2] & 0x3f;
-			for (i = 0; (i < 4); i++) {
-				ret += base64_chars[char_array_4[i]];
+void SerialInput(){
+	//ReceiveBuffer += SerialRead();
+	if(ReceiveBuffer.find("\r\n")){
+		//Contains at least one carridge return
+		char *lines = strtok(reinterpret_cast<char*>(ReceiveBuffer.c_str()),"\r\n");
+		while(lines != NULL){
+			if(strlen(lines)>5){
+				printf("lines: %s\n", lines);
+				//TODO: IMPLEMENT TRIM (if needed)
 			}
-			i = 0;
+			lines = strtok(NULL,"\r\n");
 		}
+		ReceiveBuffer = lines;
+	}
+	else{
+		//Data doesn't contain any line breaks
+		if(ReceiveBuffer.length()>4000){
+			ReceiveBuffer = "";
+			//No line breaks found in data stream
+		}
+	}
+}
+
+void ProcessNMEAdata(std::string &x) {
+	int charlocation = (int) x.rfind("$"); // Find location of last $
+	if (charlocation == -1 || charlocation + 1 > x.length() - 5) {
+		//no $ found or not enough data left
+		return;
 	}
 
-	if (i) {
-		for (j = i; j < 3; j++) {
-			char_array_3[j] = '\0';
-		}
-		char_array_4[0] = (char_array_3[0] & 0xfc) >> 2;
-		char_array_4[1] = ((char_array_3[0] & 0x03) << 4)
-				+ ((char_array_3[1] & 0xf0) >> 4);
-		char_array_4[2] = ((char_array_3[1] & 0x0f) << 2)
-				+ ((char_array_3[2] & 0xc0) >> 6);
-		for (j = 0; (j < i + 1); j++) {
-			ret += base64_chars[char_array_4[j]];
-		}
-		while ((i++ < 3)) {
-			ret += '=';
+	//drop characters before the $
+	//TODO: x = Mid(x, charlocation + 1)
+
+	charlocation = (int) x.find("*"); //Find location of first *
+	if (charlocation == -1) {
+		//no * found
+		return;
+	}
+	if (x.length() < charlocation + 3) {
+		//there aren't 2 characters after the *
+		return;
+	} else if (x.length() > charlocation + 3) { //there is extra data after the *
+		//remove the extra data after 2 chars after the *
+		//TODO: x = Mid(x, 1, charlocation + 3)
+		return;
+	}
+	if (x.length() < 8) {
+		//not enough data left
+		return;
+	}
+	char *aryNMEALine = strtok(reinterpret_cast<char*>(x.c_str()),"*");
+	//lets see if the checksum matches the stuff before the astrix
+
+	if (CalculateChecksum(replace(aryNMEALine[0], "$", "")) == aryNMEALine[1]) {
+		//Checksum matches, send it to the stuff before the astrix
+		if (aryNMEALine[0].substr(0, 6) == "$GPGGA" || aryNMEALine[0].substr(0, 6) == "$GNGGA") {
+			MostRecentGGA = x;
+			printf("MostRecentGGA: %s\n", x);
 		}
 	}
-	return ret;
 }
