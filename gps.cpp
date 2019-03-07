@@ -33,32 +33,34 @@ namespace NTRIPClient
 
 		if (CalculateChecksum(StringHandler::replace(aryNMEALine[0], "$", "")) == aryNMEALine[1]) {
 
-			if (aryNMEALine[0].substr(0, 6) == "$GPRMC" || aryNMEALine[0].substr(0, 6) == "$GNRMC") {
+			/*if (aryNMEALine[0].substr(0, 6) == "$GPRMC" || aryNMEALine[0].substr(0, 6) == "$GNRMC") {
 				
 				ProcessGPRMC(aryNMEALine[0]);	
 				
-			}
+			}*/
 			
 			if (aryNMEALine[0].substr(0, 6) == "$GPGGA" || aryNMEALine[0].substr(0, 6) == "$GNGGA") {
-												
-				MainForm::MostRecentGGA = x;
+				
 
-				ProcessGPGGA(aryNMEALine[0]);
+					return x;							
+				//MainForm::MostRecentGGA = x;
+
+				/*ProcessGPGGA(aryNMEALine[0]);
 
 				if (MainForm::DefaultInstance()->WriteNMEAToFile) {
 				
 					Recordline(x);				
-				}
+				}*/
 			
 			} 
-			if (aryNMEALine[0].substr(0, 6) == "$GPGSA" || aryNMEALine[0].substr(0, 6) == "$GNGSA") {
+			/*if (aryNMEALine[0].substr(0, 6) == "$GPGSA" || aryNMEALine[0].substr(0, 6) == "$GNGSA") {
 				
 				ProcessGPGSA(aryNMEALine[0]);				
-			}
+			}*/
 		}		
 	}
 
-	void GPS::ProcessGPGGA(std::string &code) {
+	/*void GPS::ProcessGPGGA(std::string &code) {
 
 		double InLatitude = 0;
 		double InLongitude = 0;
@@ -568,7 +570,7 @@ namespace NTRIPClient
 		mycode = mycode + std::to_string((DateTime::Now.Second % 6) + 3) + ",0";
 		mycode = "$" + mycode + "*" + CalculateChecksum(mycode); //Add checksum data
 		return mycode;
-	}   	
+	} */  	
 
 	std::string GPS::CalculateChecksum(std::string &sentence) {
 	
@@ -590,12 +592,12 @@ namespace NTRIPClient
 			default:
 				if (Checksum == 0) {
 					
-					Checksum = 
+					Checksum = static_cast<unsigned char>(Character);
 				}
 
 				else {
 				
-					Checksum = Checksum ^ 
+					Checksum = Checksum ^ static_cast<unsigned char>(Character);
 					
 				}
 				break;
