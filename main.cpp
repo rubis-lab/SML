@@ -6,6 +6,7 @@
 #include <unistd.h>
 #include <cstring>
 #include <string>
+#include "serial.c"
 
 std::string settingsfile = "Settings.txt";
 bool UserCanNotEditSettings = false;
@@ -58,12 +59,60 @@ std::string AudioFile = "";
 //Dim lastLocation As Point = Location
 //Dim lastSize As Size = Size
 
+//Structure for arguments
+struct Args
+{
+  const char *server;
+  const char *port;
+  const char *user;
+  const char *proxyhost;
+  const char *proxyport;
+  const char *password;
+  const char *nmea;
+  const char *data;
+  int         bitrate;
+  int         mode;
+
+  int         udpport;
+  int         initudp;
+  enum SerialBaud baud;
+  enum SerialDatabits databits;
+  enum SerialStopbits stopbits;
+  enum SerialParity parity;
+  enum SerialProtocol protocol;
+  const char *serdevice;
+  const char *serlogfile;
+};
+
+
+
 std::string ToBase64(unsigned char const* bytes_to_encode, unsigned int in_len);
 
 int main(int argc, char *argv[]) {
+	struct serial sx;
+	struct Args args;
+	static char bufSerial[1000];
 	struct sockaddr_in serv_addr;
 	struct hostent *server;
 	int lcount = 97;
+
+	//Connect to Serial Device
+	args.serdevice = "/dev/ttyACM0";
+	args.baud = SPABAUD_9600;
+	args.stopbits = SPASTOPBITS_1;
+	args.protocol = SPAPROTOCOL_NONE;
+	args.parity = SPAPARITY_NONE;
+	args.databits = SPADATABITS_8;
+
+	//Initialize Serial Device Connection
+	const char *e = SerialInit(&sx, args.serdevice, args.baud,
+	    		args.stopbits, args.protocol, args.parity, args.databits, 1);
+		if(e)
+		{
+			fprintf(stderr, "%s\n", e);
+			return 20;
+		}
+
 
 	//Connect to server
 	int sockfd = socket(AF_INET, SOCK_STREAM, 0);
@@ -143,7 +192,15 @@ int main(int argc, char *argv[]) {
 		int DataLength = read(sockfd, InBytes, strlen(InBytes));
 		if (DataLength > 0) {
 			DataNotReceivedFor = 0;
-			//SerialWrite(MyBytes);
+			////////////////////////////         SerialWrite(InBytes) Start     ///////////////////////////////
+			std::string serialData = InBytes;
+			char * MyBytes = new char[serialData.length() + 1];
+			std::strcpy(MyBytes, serialData.c_str());
+			int j = SerialWrite(&sx, MyBytes, strlen(MyBytes));
+			if (j < 0) {
+				fprintf(stderr, "Could not access serial device\n");
+			}
+			///////////////////////////          Serial Write End               //////////////////////////////////
 		} else if (DataLength == 0) {
 			DataNotReceivedFor += 1;
 			if (DataNotReceivedFor > 300) {
