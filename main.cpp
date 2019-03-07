@@ -9,6 +9,8 @@
 #include <unistd.h>
 #include <termios.h>
 #include <fcntl.h>
+#include <iostream>
+#include <vector>
 
 //SML HARD-CODED VALUES START
 char SerialPort[] = "/dev/ttyUSB0";
@@ -18,6 +20,7 @@ int SerialDataBits = 8;
 int SerialStopBits = 1;
 int SerialParity = 0;
 int SerialProtocol = 0;
+int Stream=0;
 std::string ReceiveBuffer;
 
 //SML HARD-CODED VALUES START
@@ -39,7 +42,7 @@ int main(int argc, char *argv[]) {
 	struct sockaddr_in serv_addr;
 	struct hostent *server;
 	int lcount = 97;
-	int Stream=0;
+
 
 	//Connect to server
 	int sockfd = socket(AF_INET, SOCK_STREAM, 0);
@@ -139,6 +142,7 @@ int main(int argc, char *argv[]) {
 		int DataLength = read(sockfd, InBytes, strlen(InBytes));
 		if (DataLength > 0) {
 			DataNotReceivedFor = 0;
+
 			/*
 			serialData.append(InBytes);
 			char *MyBytes = new char[serialData.length() + 1];
@@ -148,6 +152,7 @@ int main(int argc, char *argv[]) {
 			//SerialWrite(MyBytes);
 			////////////////////////////         SerialWrite(InBytes) Start     ///////////////////////////////
 			std::string serialData = InBytes;
+			std::cout<<serialData<<std::endl;
 			char * MyBytes = new char[serialData.length() + 1];
 			std::strcpy(MyBytes, serialData.c_str());
 			printf("%s\n", MyBytes);
@@ -189,10 +194,22 @@ int main(int argc, char *argv[]) {
 }
 
 void SerialInput(){
-	//ReceiveBuffer += SerialRead();
+	//I got error message that reinterpret_cast can't cast from const char* to char*
+	//ReceiveBuffer.c_str() is const char*, So i used method casting ReceiveBuffer type to char*
+	std::vector<char> writable(ReceiveBuffer.begin(), ReceiveBuffer.end());
+	writable.push_back('\0');
+	char* ptr = &writable[0];
+	////////////////////////////////      Serial Read[Raw Data] Start     //////////////////////////////////////////
+	char* readSerial = new char[201];
+	int errorCheck = read(Stream, readSerial, 200);
+	if (errorCheck < 0) {
+				fprintf(stderr, "Could not access serial device\n");
+			}
+	ReceiveBuffer += readSerial;
+	////////////////////////////////           Serial Read End            //////////////////////////////////////////
 	if(ReceiveBuffer.find("\r\n")){
 		//Contains at least one carridge return
-		char *lines = strtok(reinterpret_cast<char*>(ReceiveBuffer.c_str()),"\r\n");
+		char *lines = strtok(reinterpret_cast<char*>(ptr),"\r\n");
 		while(lines != NULL){
 			if(strlen(lines)>5){
 				printf("lines: %s\n", lines);
@@ -210,7 +227,7 @@ void SerialInput(){
 		}
 	}
 }
-
+/*
 void ProcessNMEAdata(std::string &x) {
 	int charlocation = (int) x.rfind("$"); // Find location of last $
 	if (charlocation == -1 || charlocation + 1 > x.length() - 5) {
@@ -276,6 +293,7 @@ ExitLabel1:
 	//Return the checksum formatted as a two-character hexadecimal
 	return 0; //TODO: return Checksum.ToString("X2");
 }
+*/
 
 std::string ToBase64(unsigned char const* bytes_to_encode, unsigned int in_len) {
 	std::string base64_chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
