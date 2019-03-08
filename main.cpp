@@ -250,72 +250,105 @@ void SerialInput() {
 	//ProcessNMEAdata(ReceiveBuffer);
 }
 
-/*
- void ProcessNMEAdata(std::string &x) {
- int charlocation = (int) x.rfind("$"); // Find location of last $
- if (charlocation == -1 || charlocation + 1 > x.length() - 5) {
- //no $ found or not enough data left
- return;
- }
- //drop characters before the $
- //TODO: x = Mid(x, charlocation + 1)
- charlocation = (int) x.find("*"); //Find location of first *
- if (charlocation == -1) {
- //no * found
- return;
- }
- if (x.length() < charlocation + 3) {
- //there aren't 2 characters after the *
- return;
- } else if (x.length() > charlocation + 3) { //there is extra data after the *
- //remove the extra data after 2 chars after the *
- //TODO: x = Mid(x, 1, charlocation + 3)
- return;
- }
- if (x.length() < 8) {
- //not enough data left
- return;
- }
- std::vector<char> writable( .begin(), ReceiveBuffer.end());
- writable.push_back('\0');
- char* ptr = &writable[0];
- char *aryNMEALine = strtok(reinterpret_cast<char*>(x.c_str()),"*");
- //lets see if the checksum matches the stuff before the astrix
- if (CalculateChecksum(replace(aryNMEALine[0], "$", "")) == aryNMEALine[1]) {
- //Checksum matches, send it to the stuff before the astrix
- if (aryNMEALine[0].substr(0, 6) == "$GPGGA" || aryNMEALine[0].substr(0, 6) == "$GNGGA") {
- MostRecentGGA = x;
- printf("MostRecentGGA: %s\n", x);
- }
- }
- }
- //Calculate the checksum for a sentence
- std::string CalculateChecksum(std::string &sentence) {
- int Checksum = 0;
- //Loop through all chars to get checksum
- for (auto Character : sentence) {
- switch (Character) {
- case '$':
- break; //Ignore the dollar sign
- case '*':
- goto ExitLabel1; //Stop processing before the asterisk
- default:
- if (Checksum == 0) { //Is this the first value for the checksum?
- //Yes. Set the checksum to the value
- Checksum = static_cast<unsigned char>(Character);
- }
- else {
- //No. XOR the checksum with this character's value
- Checksum = Checksum ^ static_cast<unsigned char>(Character);
- }
- break;
- }
- }
- ExitLabel1:
- //Return the checksum formatted as a two-character hexadecimal
- return 0; //TODO: return Checksum.ToString("X2");
- }
- */
+void ProcessNMEAdata(std::string &x){
+	
+	int charlocation = (int) x.rfind("$"); // Find location of last $
+	if (charlocation == -1 || charlocation + 1 > x.length() - 5) {
+		//no $ found or not enough data left
+		return;
+	}
+	//drop characters before the $
+	x = x.substr(charlocation);
+
+	charlocation = (int) x.find("*"); //Find location of first *
+
+	if (charlocation == -1) {
+		//no * found
+		return;
+	}
+	if (x.length() < charlocation + 3) {
+		//there aren't 2 characters after the *
+		return;
+	} else if (x.length() > charlocation + 3) { //there is extra data after the *
+		//remove the extra data after 2 chars after the *
+		x = x.substr(0, charlocation + 3);
+		
+	}
+	if (x.length() < 8) {
+		//not enough data left
+		return;
+	}
+ 	printf("%s\n", x.c_str());
+	
+	std::vector<char> v(x.begin(), x.end());
+	
+	v.push_back('\0');
+	
+	char* ptr = &v[0];
+
+	
+	char *aryNMEALine = strtok(reinterpret_cast<char*>(ptr),"*");
+
+	std::string aryNMEALine1 = aryNMEALine;
+	aryNMEALine = strtok(NULL,"*");
+	
+	std::string aryNMEALine2 = aryNMEALine;
+	aryNMEALine1.erase(0,1);
+
+	printf("1:%s\n", aryNMEALine1.c_str());
+	printf("2:%s\n",aryNMEALine2.c_str());
+
+	//lets see if the checksum matches the stuff before the astrix
+
+	if (CalculateChecksum(aryNMEALine1) == aryNMEALine2) {
+		//Checksum matches, send it to the stuff before the astrix
+		if (strstr(aryNMEALine1.c_str(), "GPGGA") || strstr(aryNMEALine1.c_str(), "GNGGA")) {
+			MostRecentGGA = x;
+			printf("MostRecentGGA: %s\n", x.c_str());
+		}
+	}
+}
+
+
+//Calculate the checksum for a sentence
+std::string CalculateChecksum(std::string &sentence) {
+
+	printf("%s\n", sentence.c_str());
+
+	int Checksum = 0;
+	//Loop through all chars to get checksum
+	std::string::iterator it = sentence.begin();
+	//Stop processing before the asterisk
+	while(it != sentence.end()){
+		if (*it == '$'){
+			//Ignore the dollar sign
+			continue;
+		}
+		if (*it == '*'){
+			//Stop processing before the asterisk
+			break;
+		}
+		//Is this the first value for the checksum?
+		else if (Checksum == 0){
+			//Yes. Set the checksum to the value
+			Checksum = *it;
+		}
+		else{
+			
+			//No. XOR the checksum with this character's value
+			Checksum = Checksum ^ (*it);
+		}
+		++it;
+	}
+
+	std::stringstream sstream;
+	sstream << std::hex << Checksum;
+	std::string result = sstream.str();
+	printf("Checksum: %s\n", result.c_str());
+
+	return result;
+
+}
 
 std::string ToBase64(unsigned char const* bytes_to_encode,
 		unsigned int in_len) {
