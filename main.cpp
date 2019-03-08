@@ -13,7 +13,7 @@
 #include <vector>
 
 //SML HARD-CODED VALUES START
-char SerialPort[] = "/dev/ttyUSB0";
+char SerialPort[] = "/dev/ttyACM0";
 //SML HARD-CODED VALUES END
 int SerialSpeed = 9600;
 int SerialDataBits = 8;
@@ -137,6 +137,7 @@ int main(int argc, char *argv[]) {
 	std::string serialData;
 	DataNotReceivedFor = 0;
 	bool KeepRunning = true;
+	SerialInput();
 	while (KeepRunning) {
 		char InBytes[1000];
 		int DataLength = read(sockfd, InBytes, strlen(InBytes));
@@ -196,9 +197,7 @@ int main(int argc, char *argv[]) {
 void SerialInput(){
 	//I got error message that reinterpret_cast can't cast from const char* to char*
 	//ReceiveBuffer.c_str() is const char*, So i used method casting ReceiveBuffer type to char*
-	std::vector<char> writable(ReceiveBuffer.begin(), ReceiveBuffer.end());
-	writable.push_back('\0');
-	char* ptr = &writable[0];
+
 	////////////////////////////////      Serial Read[Raw Data] Start     //////////////////////////////////////////
 	char* readSerial = new char[201];
 	int errorCheck = read(Stream, readSerial, 200);
@@ -206,6 +205,11 @@ void SerialInput(){
 				fprintf(stderr, "Could not access serial device\n");
 			}
 	ReceiveBuffer += readSerial;
+
+	std::vector<char> writable(ReceiveBuffer.begin(), ReceiveBuffer.end());
+		writable.push_back('\0');
+		char* ptr = &writable[0];
+
 	////////////////////////////////           Serial Read End            //////////////////////////////////////////
 	if(ReceiveBuffer.find("\r\n")){
 		//Contains at least one carridge return
@@ -216,8 +220,8 @@ void SerialInput(){
 				//TODO: IMPLEMENT TRIM (if needed)
 			}
 			lines = strtok(NULL,"\r\n");
+			ReceiveBuffer = lines;
 		}
-		ReceiveBuffer = lines;
 	}
 	else{
 		//Data doesn't contain any line breaks
@@ -234,10 +238,8 @@ void ProcessNMEAdata(std::string &x) {
 		//no $ found or not enough data left
 		return;
 	}
-
 	//drop characters before the $
 	//TODO: x = Mid(x, charlocation + 1)
-
 	charlocation = (int) x.find("*"); //Find location of first *
 	if (charlocation == -1) {
 		//no * found
@@ -257,7 +259,6 @@ void ProcessNMEAdata(std::string &x) {
 	}
 	char *aryNMEALine = strtok(reinterpret_cast<char*>(x.c_str()),"*");
 	//lets see if the checksum matches the stuff before the astrix
-
 	if (CalculateChecksum(replace(aryNMEALine[0], "$", "")) == aryNMEALine[1]) {
 		//Checksum matches, send it to the stuff before the astrix
 		if (aryNMEALine[0].substr(0, 6) == "$GPGGA" || aryNMEALine[0].substr(0, 6) == "$GNGGA") {
@@ -266,7 +267,6 @@ void ProcessNMEAdata(std::string &x) {
 		}
 	}
 }
-
 //Calculate the checksum for a sentence
 std::string CalculateChecksum(std::string &sentence) {
 	int Checksum = 0;
