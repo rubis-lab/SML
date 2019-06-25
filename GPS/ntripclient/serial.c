@@ -22,6 +22,8 @@
 /* system includes */
 #include <stdio.h>
 #include <string.h>
+
+#ifndef WINDOWSVERSION
 #include <errno.h>
 #include <fcntl.h>
 #include <string.h>
@@ -48,6 +50,40 @@ struct serial
   struct termios Termios;
   int            Stream;
 };
+#else /* WINDOWSVERSION */
+#include <windows.h>
+#define SERIALDEFAULTDEVICE "COM1"
+enum SerialBaud {
+  SPABAUD_50 = 50, SPABAUD_110 = 110, SPABAUD_300 = 300, SPABAUD_600 = 600,
+  SPABAUD_1200 = 1200, SPABAUD_2400 = 2400, SPABAUD_4800 = 4800,
+  SPABAUD_9600 = 9600, SPABAUD_19200 = 19200,
+  SPABAUD_38400 = 38400, SPABAUD_57600 = 57600, SPABAUD_115200 = 115200 };
+enum SerialDatabits {
+  SPADATABITS_5 = 5, SPADATABITS_6 = 6, SPADATABITS_7 = 7, SPADATABITS_8 = 8 };
+enum SerialStopbits {
+  SPASTOPBITS_1 = 1, SPASTOPBITS_2 = 2 };
+enum SerialParity {
+  SPAPARITY_NONE = 'N', SPAPARITY_ODD = 'O', SPAPARITY_EVEN = 'E'};
+enum SerialProtocol {
+  SPAPROTOCOL_NONE, SPAPROTOCOL_RTS_CTS, SPAPROTOCOL_XON_XOFF};
+
+struct serial
+{
+  DCB    Termios;
+  HANDLE Stream;
+};
+#if !defined(__GNUC__)
+int strncasecmp(const char *a, const char *b, int len)
+{
+  while(len-- && *a && tolower(*a) == tolower(*b))
+  {
+    ++a; ++b;
+  }
+  return len ? (tolower(*a) - tolower(*b)) : 0;
+}
+#endif /* !__GNUC__ */
+
+#endif /* WINDOWSVERSION */
 
 static enum SerialParity SerialGetParity(const char *buf, int *ressize)
 {
@@ -98,6 +134,7 @@ static enum SerialProtocol SerialGetProtocol(const char *buf, int *ressize)
   return Protocol;
 }
 
+#ifndef WINDOWSVERSION
 static void SerialFree(struct serial *sn)
 {
   if(sn->Stream)
@@ -164,3 +201,85 @@ static int SerialWrite(struct serial *sn, const char *buffer, size_t size)
   }
   return j;
 }
+
+#else /* WINDOWSVERSION */
+static void SerialFree(struct serial *sn)
+{
+  if(sn->Stream)
+  {
+    SetCommState(sn->Stream, &sn->Termios);
+    /* reset old settings */
+    CloseHandle(sn->Stream);
+    sn->Stream = 0;
+  }
+}
+
+static const char * SerialInit(struct serial *sn, const char *Device,
+enum SerialBaud Baud, enum SerialStopbits StopBits,
+enum SerialProtocol Protocol, enum SerialParity Parity,
+enum SerialDatabits DataBits, int dowrite)
+{
+  char mydevice[50];
+  if(Device[0] != '\\')
+    snprintf(mydevice, sizeof(mydevice), "\\\\.\\%s", Device);
+  else
+    mydevice[0] = 0;
+
+  if((sn->Stream = CreateFile(mydevice[0] ? mydevice : Device,
+  dowrite ? GENERIC_WRITE|GENERIC_READ : GENERIC_READ, 0, 0, OPEN_EXISTING,
+  0, 0)) == INVALID_HANDLE_VALUE)
+    return "could not create file";
+
+  memset(&sn->Termios, 0, sizeof(sn->Termios));
+  GetCommState(sn->Stream, &sn->Termios);
+
+  DCB dcb;
+  memset(&dcb, 0, sizeof(dcb));
+  char str[100];
+  snprintf(str,sizeof(str),
+  "baud=%d parity=%c data=%d stop=%d xon=%s octs=%s rts=%s",
+  Baud, Parity, DataBits, StopBits,
+  Protocol == SPAPROTOCOL_XON_XOFF ? "on" : "off",
+  Protocol == SPAPROTOCOL_RTS_CTS ? "on" : "off",
+  Protocol == SPAPROTOCOL_RTS_CTS ? "on" : "off");
+#ifdef DEBUG
+  fprintf(stderr, "COM Settings: %s\n", str);
+#endif
+
+  COMMTIMEOUTS ct = {MAXDWORD, 0, 0, 0, 0};
+
+  if(!BuildCommDCB(str, &dcb))
+  {
+    CloseHandle(sn->Stream);
+    return "creating device parameters failed";
+  }
+  else if(!SetCommState(sn->Stream, &dcb))
+  {
+    CloseHandle(sn->Stream);
+    return "setting device parameters failed";
+  }
+  else if(!SetCommTimeouts(sn->Stream, &ct))
+  {
+    CloseHandle(sn->Stream);
+    return "setting timeouts failed";
+  }
+
+  return 0;
+}
+
+static int SerialRead(struct serial *sn, char *buffer, size_t size)
+{
+  DWORD j = 0;
+  if(!ReadFile(sn->Stream, buffer, size, &j, 0))
+    return -1;
+  return j;
+}
+
+static int SerialWrite(struct serial *sn, const char *buffer, size_t size)
+{
+  DWORD j = 0;
+  if(!WriteFile(sn->Stream, buffer, size, &j, 0))
+    return -1;
+  return j;
+}
+#endif /* WINDOWSVERSION */
