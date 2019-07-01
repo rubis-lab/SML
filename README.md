@@ -25,7 +25,9 @@
      
     GPS : RT 3002 / Inertial Labs INS-P / U-blox
      
-    Camera : Mobileye 630 / EasyCap H.264 (USB 2.0)     
+    Camera : Mobileye 630 
+    
+    Video Capture : EasyCap H.264 (USB 2.0)
     
 
 
