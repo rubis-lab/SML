@@ -1,0 +1,10 @@
+ID,SIG,ROSMSG1
+17,Automation_Autobox,automation_autobox
+4,CAN3_Alive,can_autobox_alive
+4,Yaw_DR,h_dr
+265,X_DR,x_dr
+265,Y_DR,y_dr
+65,RT_STD,rt_std
+65,H_RT,h_rt
+272,X_RT,x_rt
+272,Y_RT,y_rt
