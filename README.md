@@ -2,7 +2,7 @@
 # 1. Abstraction
   The purpose of this project is suggesting ROS based TX2 prototype for Autonomous Driving based on VDCL algorithm.
   
-   ![Github](./image/Github.JPG)
+   ![Github](./image/Github2.JPG)
                         **Fig 1. ROS 기반 자율주행 알고리즘을 위한 통합 개발환경 구성요소**
   
   Current version of TX2 prototype has been verified from real-road tests. 
