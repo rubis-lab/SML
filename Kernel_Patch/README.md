@@ -4,7 +4,7 @@ The kernel patch is required to sets proper environmet for ROS based TX2 prototy
 
 [Kernel Patch for TX2](https://www.jetsonhacks.com/2017/03/25/build-kernel-and-modules-nvidia-jetson-tx2/ 'Kernel Patch')
 
-The following Setup is required.
+The following setup is required.
 
 **CH341** : Serial to USB 
 
