@@ -1,0 +1,70 @@
+version: 2
+jobs:
+  kinetic:
+    docker:
+      - image: autonomoustuff/docker-builds:kinetic-perception
+    steps:
+      - checkout
+      - run:
+          name: Set Up Container
+          command: |
+            apt-get update -qq
+            source `find /opt/ros -name setup.bash | sort | head -1`
+            mkdir ibeo_lux && mv `find -maxdepth 1 -not -name . -not -name ibeo_lux` ibeo_lux/
+            git clone https://github.com/astuff/network_interface
+            git clone https://github.com/astuff/ibeo_core
+            rosdep install --from-paths . --ignore-src -y
+            cd ..
+            catkin init
+            catkin config --extend /opt/ros/$ROS_DISTRO
+      - run:
+          name: Build
+          command: |
+            cd ..
+            catkin build
+      - run:
+          name: Run Tests
+          command: |
+            source /opt/ros/kinetic/setup.bash
+            cd ..
+            catkin run_tests --no-deps ibeo_lux
+            catkin_test_results
+    working_directory: ~/src
+
+  melodic:
+    docker:
+      - image: autonomoustuff/docker-builds:melodic-perception
+    steps:
+      - checkout
+      - run:
+          name: Set Up Container
+          command: |
+            apt-get update -qq
+            source `find /opt/ros -name setup.bash | sort | head -1`
+            mkdir ibeo_lux && mv `find -maxdepth 1 -not -name . -not -name ibeo_lux` ibeo_lux/
+            git clone https://github.com/astuff/network_interface
+            git clone https://github.com/astuff/ibeo_core
+            rosdep install --from-paths . --ignore-src -y
+            cd ..
+            catkin init
+            catkin config --extend /opt/ros/$ROS_DISTRO
+      - run:
+          name: Build
+          command: |
+            cd ..
+            catkin build
+      - run:
+          name: Run Tests
+          command: |
+            source /opt/ros/melodic/setup.bash
+            cd ..
+            catkin run_tests --no-deps ibeo_lux
+            catkin_test_results
+    working_directory: ~/src
+
+workflows:
+  version: 2
+  ros_build:
+    jobs:
+      - kinetic
+      - melodic
